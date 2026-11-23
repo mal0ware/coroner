@@ -267,8 +267,7 @@ def trades_to_zero(values: FloatArray) -> int:
         return 0
     ordered = np.sort(values)[::-1]
     totals = remaining - np.cumsum(ordered)
-    # Guard against a last-digit residue when every trade is removed.
-    totals[-1] = min(totals[-1], 0.0) if np.all(ordered >= 0) else totals[-1]
+    # The tolerance absorbs a last-digit residue when the sum should be exactly zero.
     hits = np.flatnonzero(totals <= 1e-9 * max(1.0, abs(remaining)))
     return int(hits[0]) + 1
 

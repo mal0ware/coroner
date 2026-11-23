@@ -319,6 +319,8 @@ def build_report(a: Analysis, source_name: str) -> Report:
                 "The ulcer index and Martin ratio use end-of-day equity on every calendar day "
                 "from the first exit to the last. Maximum drawdown, time under water and "
                 "recovery factor use the trade-by-trade equity curve.",
+                "The annualised return is compound, on 365.25 days a year, and is not "
+                "computed for logs shorter than 30 days.",
                 "Recovery factor is net profit over maximum drawdown. It is a trading-platform "
                 "convention, not a statistic from the literature.",
             ],

@@ -102,13 +102,14 @@ def concentration_sentence(leave: LeaveOut, to_zero: int) -> str:
             f"The log has only {count_word(leave.removed)} trades, "
             "too few to leave the best ones out."
         )
+    carry = "trade carries" if leave.removed == 1 else "trades carry"
     if leave.share >= CONCENTRATION_SHARE:
         return (
-            f"{count_word(leave.removed, capital=True)} trades carry {percent(leave.share)} "
+            f"{count_word(leave.removed, capital=True)} {carry} {percent(leave.share)} "
             f"of the profit: the other {leave.rest.n:,} {_made(leave.rest.total)} between them."
         )
     return (
-        f"The best {count_word(leave.removed)} trades carry {percent(leave.share)} of the "
+        f"The best {count_word(leave.removed)} {carry} {percent(leave.share)} of the "
         f"profit, and the best {count_word(to_zero)} would have to go before the total "
         "reached zero."
     )

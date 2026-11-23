@@ -11,6 +11,8 @@ from coroner import barrier, checks
 from coroner.checks import FloatArray, TimeArray
 from coroner.trades import TradeLog
 
+MIN_DAYS_TO_ANNUALISE = 30.0
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -149,7 +151,13 @@ def analyse(log: TradeLog, settings: Settings | None = None) -> Analysis:
     daily_dates, daily = checks.daily_equity(log.exit_local, net, s.capital)
     ulcer = checks.ulcer_index(daily)
     span_days = float((log.exit.max() - log.entry.min()) / np.timedelta64(1, "s")) / 86_400.0
-    annual = checks.annualised_return_pct(s.capital, float(trade_equity[-1]), span_days)
+    # Annualising a few days of trading compounds noise into nonsense, so the
+    # annual return and the Martin ratio are left undefined for short logs.
+    annual = (
+        checks.annualised_return_pct(s.capital, float(trade_equity[-1]), span_days)
+        if span_days >= MIN_DAYS_TO_ANNUALISE
+        else math.nan
+    )
     dd_amount, dd_pct = checks.max_drawdown(trade_equity)
     underwater, recovered = checks.longest_underwater(trade_times, trade_equity)
     drawdown = DrawdownSummary(
