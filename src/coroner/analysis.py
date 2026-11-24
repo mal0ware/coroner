@@ -91,6 +91,7 @@ class Analysis:
     clock: str
     net: checks.TradeStats
     gross: checks.TradeStats
+    clustered: list[checks.ClusteredT]
     perm_time_of_day: checks.PermutationResult
     perm_weekday: checks.PermutationResult
     halves: checks.HalfSplit
@@ -99,6 +100,8 @@ class Analysis:
     leave_n: checks.LeaveOut
     leave_5pct: checks.LeaveOut
     to_zero: int
+    null_normal: checks.ConcentrationNull | None
+    null_symmetric: checks.ConcentrationNull | None
     cost: checks.CostShare
     drawdown: DrawdownSummary
     periods: list[checks.PeriodShare]
@@ -209,6 +212,17 @@ def analyse(log: TradeLog, settings: Settings | None = None) -> Analysis:
         brownian=brownian,
     )
 
+    # The concentration nulls need a spread to scale by and a profit to share out.
+    can_compare = n >= 2 and net_stats.sd > 0 and net_stats.total > 0
+    null_normal, null_symmetric = (
+        (
+            checks.concentration_null(net, s.best_n, "normal", s.draws, s.seed + 5),
+            checks.concentration_null(net, s.best_n, "symmetric", s.draws, s.seed + 6),
+        )
+        if can_compare
+        else (None, None)
+    )
+
     return Analysis(
         settings=s,
         n=n,
@@ -217,6 +231,10 @@ def analyse(log: TradeLog, settings: Settings | None = None) -> Analysis:
         clock=log.clock,
         net=net_stats,
         gross=checks.trade_stats(log.gross),
+        clustered=[
+            checks.clustered_t(net, checks.period_keys(log.exit_local, key), name)
+            for key, name in (("day", "exit day"), ("month", "exit month"))
+        ],
         perm_time_of_day=perm_tod,
         perm_weekday=perm_wd,
         halves=checks.half_split(net),
@@ -225,6 +243,8 @@ def analyse(log: TradeLog, settings: Settings | None = None) -> Analysis:
         leave_n=checks.leave_out_best(net, s.best_n),
         leave_5pct=checks.leave_out_best(net, checks.five_percent_count(n)),
         to_zero=checks.trades_to_zero(net),
+        null_normal=null_normal,
+        null_symmetric=null_symmetric,
         cost=checks.cost_share(log.gross, net),
         drawdown=drawdown,
         periods=periods,

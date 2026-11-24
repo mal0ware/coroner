@@ -61,6 +61,8 @@ def _num(value: float, digits: int = 2) -> str:
 
 
 def _pct(fraction: float, digits: int = 1) -> str:
+    if math.isinf(fraction):
+        return "total not positive"
     return "n/a" if math.isnan(fraction) else f"{100 * fraction:.{digits}f}%"
 
 
@@ -134,13 +136,25 @@ def build_report(a: Analysis, source_name: str) -> Report:
             "Per-trade result",
             [
                 "The t-statistic is mean / standard deviation x sqrt(number of trades), with "
-                "the n - 1 standard deviation. It treats trades as independent draws."
+                "the n - 1 standard deviation. It treats trades as independent draws.",
+                "The clustered t-statistics use a cluster-robust standard error: trades that "
+                "exit on the same day (or in the same month) may be correlated in any way, and "
+                "the days (months) are taken as independent. With few clusters the clustered "
+                "standard error is itself noisy.",
             ],
             [
                 Table(
                     ["", "Trades", "Total", "Mean", "Std dev", "t-statistic"],
                     [_stats_row("Net", a.net), _stats_row("Gross", a.gross)],
-                )
+                ),
+                Table(
+                    ["Net, t-statistic", "Clusters", "t-statistic"],
+                    [["Trades independent", f"{a.n:,}", _num(a.net.t_stat)]]
+                    + [
+                        [f"Clustered by {c.period}", f"{c.clusters:,}", _num(c.t_stat)]
+                        for c in a.clustered
+                    ],
+                ),
             ],
             Figure(
                 "equity.png",
@@ -211,6 +225,67 @@ def build_report(a: Analysis, source_name: str) -> Report:
             ],
         )
     )
+
+    nulls = [x for x in (a.null_normal, a.null_symmetric) if x is not None]
+    if nulls:
+        null_names = {
+            "normal": "Normal, same mean and std dev",
+            "symmetric": "Trades resampled and reflected about the mean",
+        }
+        null_rows = [
+            [
+                "This log",
+                _pct(a.leave_n.share),
+                "",
+                "",
+                f"{a.to_zero:,}",
+                "",
+                "",
+            ]
+        ] + [
+            [
+                null_names[x.name],
+                _pct(x.share_median),
+                _pct(x.share_p95),
+                f"{x.share_p:.4f}",
+                _num(x.to_zero_median, 0),
+                _num(x.to_zero_p05, 0),
+                f"{x.to_zero_p:.4f}",
+            ]
+            for x in nulls
+        ]
+        sections.append(
+            Section(
+                "Is that more concentrated than chance?",
+                [
+                    f"Each row draws {nulls[0].draws:,} logs of {a.n:,} trades under a null and "
+                    f"computes the same two numbers. The Normal null keeps the mean and standard "
+                    "deviation and has thin tails and no skew. The reflected null resamples these "
+                    "trades and flips each one about the mean with a random sign, which keeps the "
+                    "tails and removes the skew. p is one-sided: the share of draws at least as "
+                    "concentrated as this log, counting the log itself.",
+                    "A draw whose total is zero or below counts as fully concentrated. "
+                    + "; ".join(
+                        f"{null_names[x.name]}: {x.not_positive:,} such draws" for x in nulls
+                    )
+                    + ".",
+                ],
+                [
+                    Table(
+                        [
+                            "",
+                            f"Share in best {a.leave_n.removed}",
+                            "95th pct",
+                            "p",
+                            "Trades to zero",
+                            "5th pct",
+                            "p",
+                        ],
+                        null_rows,
+                    )
+                ],
+            )
+        )
 
     sections.append(
         Section(

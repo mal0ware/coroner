@@ -322,3 +322,83 @@ def test_period_keys_group_months_and_quarters() -> None:
     assert (months_share.positive, months_share.total) == (2, 3)
     with pytest.raises(ValueError):
         checks.period_keys(stamps, "week")
+
+
+# ---- concentration against a null ------------------------------------------
+
+
+def test_top_share_and_to_zero_by_hand() -> None:
+    samples = np.asarray([[5.0, 3.0, 2.0], [4.0, -1.0, -3.0], [1.0, 1.0, 1.0]])
+    share, to_zero = checks.top_share_and_to_zero(samples, 1)
+    # row 1: 5 / 10; removing 5 leaves 5, removing 3 more leaves 2, all three leave 0
+    # row 2: total 0, not positive; row 3: 1 / 3, three removals to reach 0
+    assert share[0] == 0.5 and math.isinf(share[1]) and share[2] == pytest.approx(1 / 3)
+    assert to_zero.tolist() == [3, 0, 3]
+
+
+def test_top_share_matches_the_single_log_functions() -> None:
+    rng = np.random.default_rng(3)
+    samples = rng.normal(1.0, 4.0, size=(50, 40))
+    share, to_zero = checks.top_share_and_to_zero(samples, 5)
+    for row, s, z in zip(samples, share, to_zero, strict=True):
+        if row.sum() > 0:
+            assert s == pytest.approx(checks.leave_out_best(row, 5).share)
+        assert z == checks.trades_to_zero(row)
+
+
+def test_concentration_null_is_calibrated_on_normal_data() -> None:
+    # Logs drawn from the null itself should give roughly uniform p-values.
+    ps = []
+    for seed in range(60):
+        values = np.random.default_rng(seed).normal(5.0, 20.0, size=200)
+        ps.append(checks.concentration_null(values, 10, "normal", 200, seed).share_p)
+    assert 0.4 < float(np.mean(ps)) < 0.6
+    assert float(np.mean(np.asarray(ps) < 0.05)) < 0.12
+
+
+def test_concentration_null_flags_a_few_huge_winners() -> None:
+    rng = np.random.default_rng(7)
+    # A clear edge (t near 9) plus five winners of 12 standard deviations.
+    values = np.concatenate((rng.normal(1.0, 5.0, size=2000), np.full(5, 60.0)))
+    result = checks.concentration_null(values, 5, "normal", 500, 1)
+    # The share stands out; the count to zero does not, since the edge survives them.
+    assert result.share_p < 0.01 and result.to_zero_p > 0.05
+
+
+def test_symmetric_null_keeps_the_mean_and_has_no_skew() -> None:
+    values = np.asarray([-1.0, -1.0, -1.0, 10.0])
+    result = checks.concentration_null(values, 1, "symmetric", 400, 0)
+    assert result.draws == 400 and result.name == "symmetric"
+    with pytest.raises(ValueError):
+        checks.concentration_null(values, 1, "other")
+
+
+# ---- clustered t-statistic -------------------------------------------------
+
+
+def test_clustered_t_equals_plain_t_with_one_trade_per_cluster() -> None:
+    values = f(3, -1, 4, 1, 5, -9, 2, 6)
+    plain = checks.trade_stats(values).t_stat
+    clustered = checks.clustered_t(values, np.arange(8, dtype=np.int64), "day")
+    assert clustered.clusters == 8 and clustered.t_stat == pytest.approx(plain)
+
+
+def test_clustered_t_by_hand() -> None:
+    # values 1, 3 | 2, 6: mean 3, residuals -2, 0 | -1, 3, cluster sums -2 and 2
+    # Var = 2 / 1 x (4 + 4) / 16 = 1, t = 3 / 1
+    result = checks.clustered_t(f(1, 3, 2, 6), np.asarray([0, 0, 1, 1]), "month")
+    assert result.clusters == 2 and result.t_stat == pytest.approx(3.0)
+
+
+def test_clustered_t_falls_when_trades_in_a_cluster_move_together() -> None:
+    rng = np.random.default_rng(0)
+    shocks = rng.normal(0.0, 1.0, size=50)
+    values = np.repeat(shocks, 20) + rng.normal(0.0, 0.2, size=1000) + 0.1
+    keys = np.repeat(np.arange(50), 20).astype(np.int64)
+    plain = checks.trade_stats(values).t_stat
+    clustered = checks.clustered_t(values, keys, "day").t_stat
+    assert abs(clustered) < abs(plain) / 2
+
+
+def test_clustered_t_needs_two_clusters() -> None:
+    assert math.isnan(checks.clustered_t(f(1, 2, 3), np.zeros(3, dtype=np.int64), "day").t_stat)

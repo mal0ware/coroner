@@ -272,6 +272,138 @@ def trades_to_zero(values: FloatArray) -> int:
     return int(hits[0]) + 1
 
 
+def top_share_and_to_zero(samples: FloatArray, k: int) -> tuple[FloatArray, IntArray]:
+    """Share of the total in the ``k`` largest values, and trades-to-zero, per row.
+
+    For each row of ``samples``: the leave-out share (as in :func:`leave_out_best`)
+    and the trades-to-zero count (as in :func:`trades_to_zero`). A row whose
+    total is zero or below has share ``+inf`` (its best trades carry all of the
+    profit and more) and trades-to-zero 0.
+    """
+    if samples.ndim != 2:
+        raise ValueError("samples must be two-dimensional")
+    k = min(max(k, 0), samples.shape[1])
+    ordered = -np.sort(-samples, axis=1)
+    totals = ordered.sum(axis=1)
+    top = ordered[:, :k].sum(axis=1)
+    positive = totals > 0
+    share = np.full(samples.shape[0], np.inf)
+    share[positive] = top[positive] / totals[positive]
+    remaining = totals[:, None] - np.cumsum(ordered, axis=1)
+    tolerance = 1e-9 * np.maximum(1.0, np.abs(totals))[:, None]
+    reached = remaining <= tolerance
+    to_zero = np.where(reached.any(axis=1), reached.argmax(axis=1) + 1, samples.shape[1])
+    to_zero[~positive] = 0
+    return np.asarray(share, dtype=np.float64), np.asarray(to_zero, dtype=np.int64)
+
+
+@dataclass(frozen=True)
+class ConcentrationNull:
+    """Where the observed concentration sits among logs drawn under a null.
+
+    ``share_p`` is the one-sided p-value for "more concentrated than the null":
+    ``(1 + draws with share >= observed) / (1 + draws)``. ``to_zero_p`` is the
+    same for "fewer best trades needed to reach zero": draws with trades-to-zero
+    ``<=`` observed. ``not_positive`` counts draws whose total was zero or below.
+    """
+
+    name: str
+    draws: int
+    share_median: float
+    share_p95: float
+    share_p: float
+    to_zero_median: float
+    to_zero_p05: float
+    to_zero_p: float
+    not_positive: int
+
+
+def concentration_null(
+    values: FloatArray,
+    k: int,
+    method: str,
+    draws: int = 2000,
+    seed: int = 0,
+) -> ConcentrationNull:
+    """Compare the best-``k`` share and trades-to-zero with logs drawn under a null.
+
+    ``method`` is ``"normal"``: ``n`` i.i.d. Normal draws with the sample mean
+    and standard deviation, which keeps mean and spread and removes skew and
+    fat tails; or ``"symmetric"``: the trades resampled with replacement and
+    reflected about the mean with a random sign, which keeps mean, spread and
+    tail weight and removes only the skew. Percentiles are order statistics
+    (numpy's ``inverted_cdf``), so an infinite share is never interpolated.
+    """
+    n = int(values.shape[0])
+    if n < 2:
+        raise ValueError("need at least two trades")
+    rng = np.random.default_rng(seed)
+    mean = float(values.mean())
+    if method == "normal":
+        samples = rng.normal(mean, float(values.std(ddof=1)), size=(draws, n))
+    elif method == "symmetric":
+        picked = values[rng.integers(0, n, size=(draws, n))]
+        signs = rng.choice(np.array([-1.0, 1.0]), size=(draws, n))
+        samples = mean + signs * (picked - mean)
+    else:
+        raise ValueError(f"unknown method {method!r}")
+    share, to_zero = top_share_and_to_zero(np.asarray(samples, dtype=np.float64), k)
+    observed_share = leave_out_best(values, k).share
+    observed_zero = trades_to_zero(values)
+    if math.isnan(observed_share):
+        share_p = _NAN
+    else:
+        share_p = (1 + int(np.sum(share >= observed_share))) / (1 + draws)
+    return ConcentrationNull(
+        name=method,
+        draws=draws,
+        share_median=float(np.quantile(share, 0.5, method="inverted_cdf")),
+        share_p95=float(np.quantile(share, 0.95, method="inverted_cdf")),
+        share_p=share_p,
+        to_zero_median=float(np.quantile(to_zero, 0.5, method="inverted_cdf")),
+        to_zero_p05=float(np.quantile(to_zero, 0.05, method="inverted_cdf")),
+        to_zero_p=(1 + int(np.sum(to_zero <= observed_zero))) / (1 + draws),
+        not_positive=int(np.sum(~np.isfinite(share))),
+    )
+
+
+# --------------------------------------------------------------------------
+# 5b. t-statistic with trades clustered by calendar period
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClusteredT:
+    """t-statistic of the mean with a cluster-robust standard error."""
+
+    period: str
+    clusters: int
+    t_stat: float
+
+
+def clustered_t(values: FloatArray, keys: IntArray, period: str) -> ClusteredT:
+    """Mean over its cluster-robust standard error, trades grouped by ``keys``.
+
+    With residuals e_i = x_i - mean and S_g the sum of e_i over cluster g,
+    Var(mean) = G / (G - 1) x sum_g S_g^2 / n^2. Trades in the same cluster may
+    be correlated in any way; clusters are taken as independent. When every
+    cluster holds one trade this equals the plain t-statistic. NaN with fewer
+    than two clusters or a zero variance.
+    """
+    if values.shape[0] != keys.shape[0]:
+        raise ValueError("values and keys differ in length")
+    n = int(values.shape[0])
+    _, inverse = np.unique(keys, return_inverse=True)
+    groups = int(inverse.max()) + 1 if n else 0
+    if groups < 2:
+        return ClusteredT(period, groups, _NAN)
+    mean = float(values.mean())
+    sums = np.bincount(inverse, weights=values - mean)
+    variance = groups / (groups - 1) * float(np.sum(sums**2)) / n**2
+    t_stat = mean / math.sqrt(variance) if variance > 0 else _NAN
+    return ClusteredT(period, groups, t_stat)
+
+
 # --------------------------------------------------------------------------
 # 6. Cost share
 # --------------------------------------------------------------------------

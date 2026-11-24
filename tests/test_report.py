@@ -92,9 +92,9 @@ def test_hand_built_verdict(write_csv: WriteCsv) -> None:
     a = analyse(load_trades(write_csv(HAND)), Settings(best_n=1, min_bucket_trades=3, paths=50))
     sentences = verdict(a)
     assert 3 <= len(sentences) <= 5
-    assert (
-        sentences[1] == "One trade carries 83% of the profit: the other 5 made 20.00 between them."
-    )
+    # Six trades are too few for the share to stand out against a Normal null.
+    assert sentences[1].startswith("The best trade carries 83% of the profit, against a median")
+    assert sentences[1].endswith("and the best two would have to go before the total reached zero.")
     assert sentences[3].startswith("The 09:00-10:00 window holds 3 trades for a median of 3.0 min")
 
 
@@ -225,9 +225,14 @@ def test_samples_have_the_same_total_and_different_causes() -> None:
     assert not any(r.short_hold for r in broad.time_of_day)
     assert broad.leave_n.share < 0.5 and broad.to_zero > 30
 
-    assert verdict(conc)[1] == (
-        "Ten trades carry 99% of the profit: the other 390 made 200.00 between them."
-    )
+    # The ten big trades inflate the standard deviation the Normal null is drawn
+    # with, so at t = 2.4 the null's own best ten carry about half the profit and
+    # 99% does not stand out (p > 0.05). The leave-out t and the time-of-day test
+    # are what separate the two samples.
+    assert conc.null_normal is not None and conc.null_normal.share_p > 0.05
+    assert conc.leave_n.rest.t_stat < 0.1
+    assert verdict(conc)[1].startswith("The best ten trades carry 99% of the profit")
+    assert broad.null_normal is not None and broad.null_normal.share_p > 0.2
     assert verdict(broad)[1].startswith("The best ten trades carry")
     assert 3 <= len(verdict(broad)) <= 5 and 3 <= len(verdict(conc)) <= 5
 

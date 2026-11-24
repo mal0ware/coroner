@@ -53,35 +53,57 @@ def test_headline_without_a_t_statistic() -> None:
     assert "t-statistic of" not in sentence and "same result" in sentence
 
 
-def test_concentration_when_the_best_carry_most() -> None:
+def null(p: float, median: float = 0.3) -> checks.ConcentrationNull:
+    return checks.ConcentrationNull("normal", 2000, median, 0.45, p, 40.0, 25.0, 0.5, 0)
+
+
+def test_concentration_when_the_best_carry_more_than_the_null_gives() -> None:
     # 10 trades of 99 and 20 of 0.5: total 1000, best ten carry 99%
     values = f(*([99.0] * 10 + [0.5] * 20))
-    sentence = verdict.concentration_sentence(checks.leave_out_best(values, 10), 11)
-    assert sentence == ("Ten trades carry 99% of the profit: the other 20 made 10.00 between them.")
+    sentence = verdict.concentration_sentence(checks.leave_out_best(values, 10), 11, null(0.01))
+    assert sentence == (
+        "Ten trades carry 99% of the profit, against a median of 30% for logs drawn from a "
+        "Normal with the same mean and spread (p = 0.0100): the other 20 made 10.00 between them."
+    )
 
 
 def test_concentration_when_the_rest_lost() -> None:
     values = f(100, 100, -30, -20)
-    sentence = verdict.concentration_sentence(checks.leave_out_best(values, 2), 2)
-    assert sentence == "Two trades carry 133% of the profit: the other 2 lost 50.00 between them."
+    sentence = verdict.concentration_sentence(checks.leave_out_best(values, 2), 2, null(0.001))
+    assert sentence.startswith("Two trades carry 133% of the profit, against a median of 30%")
+    assert sentence.endswith(": the other 2 lost 50.00 between them.")
 
 
-def test_concentration_when_profit_is_spread() -> None:
+def test_concentration_within_the_null() -> None:
     values = f(*([10.0] * 100))
     sentence = verdict.concentration_sentence(
-        checks.leave_out_best(values, 10), checks.trades_to_zero(values)
+        checks.leave_out_best(values, 10), checks.trades_to_zero(values), null(0.5, 0.1)
     )
     assert sentence == (
-        "The best ten trades carry 10% of the profit, and the best 100 would have to go "
+        "The best ten trades carry 10% of the profit, against a median of 10% for logs drawn "
+        "from a Normal with the same mean and spread (p = 0.5000), and the best 100 would have "
+        "to go before the total reached zero."
+    )
+
+
+def test_concentration_without_a_null_names_no_reference() -> None:
+    values = f(*([99.0] * 10 + [0.5] * 20))
+    sentence = verdict.concentration_sentence(checks.leave_out_best(values, 10), 11)
+    assert sentence == (
+        "The best ten trades carry 99% of the profit, and the best eleven would have to go "
         "before the total reached zero."
     )
 
 
-def test_concentration_threshold_is_one_half() -> None:
-    at = verdict.concentration_sentence(checks.leave_out_best(f(5, 5, 4, 3, 2, 1), 2), 4)
-    below = verdict.concentration_sentence(checks.leave_out_best(f(5, 4, 4, 3, 2, 2), 2), 4)
-    assert at.startswith("Two trades carry 50%")
-    assert below.startswith("The best two trades carry 45%")
+def test_concentration_threshold_is_p_below_five_percent() -> None:
+    leave = checks.leave_out_best(f(5, 5, 4, 3, 2, 1), 2)
+    assert verdict.concentration_sentence(leave, 4, null(0.0499)).startswith("Two trades carry")
+    assert verdict.concentration_sentence(leave, 4, null(0.05)).startswith("The best two trades")
+
+
+def test_concentration_with_one_trade_left_out() -> None:
+    sentence = verdict.concentration_sentence(checks.leave_out_best(f(5, 1, 1), 1), 1)
+    assert sentence.startswith("The best trade carries 71% of the profit")
 
 
 def test_concentration_when_no_profit_or_too_few_trades() -> None:

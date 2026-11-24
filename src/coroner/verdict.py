@@ -5,11 +5,13 @@ the order they are applied:
 
 1. Headline (always). Trade count, net total, mean per trade and t-statistic,
    saying whether the mean is more than two standard errors from zero.
-2. Concentration (always). If the log made money: when the best N trades carry
-   at least half of the profit, "N trades carry X% of the profit" and what the
-   rest made; otherwise the share they carry and how many of the best trades
-   must go before the total reaches zero. If the log did not make money, it
-   says there is no profit to attribute.
+2. Concentration (always). If the log made money, the share of the profit in
+   the best N trades beside the median share for logs of the same length drawn
+   from a Normal with the same mean and standard deviation, with a one-sided
+   p-value. When p < 0.05, "N trades carry X% of the profit" and what the rest
+   made; otherwise how many of the best trades must go before the total
+   reaches zero. If the log did not make money, it says there is no profit to
+   attribute.
 3. Halves (always). What the first and the second half made or lost.
 4. Time (only when triggered). If a time-of-day bucket is flagged for a short
    median hold, the flagged bucket with the largest absolute profit is named.
@@ -29,6 +31,7 @@ from collections.abc import Sequence
 from coroner.analysis import Analysis
 from coroner.checks import (
     BucketRow,
+    ConcentrationNull,
     CostShare,
     HalfSplit,
     LeaveOut,
@@ -36,7 +39,7 @@ from coroner.checks import (
     TradeStats,
 )
 
-CONCENTRATION_SHARE = 0.5
+CONCENTRATION_P = 0.05
 PERMUTATION_P = 0.01
 COST_SHARE = 0.5
 T_THRESHOLD = 2.0
@@ -65,7 +68,9 @@ def money(value: float) -> str:
 
 
 def percent(fraction: float) -> str:
-    """``0.99`` -> ``99%`` (whole percent)."""
+    """``0.99`` -> ``99%`` (whole percent); infinity (no positive total) -> ``all``."""
+    if math.isinf(fraction):
+        return "all"
     return f"{100 * fraction:.0f}%"
 
 
@@ -92,7 +97,9 @@ def headline_sentence(net: TradeStats) -> str:
     return start + f" with a t-statistic of {net.t_stat:.2f}, which is {side}."
 
 
-def concentration_sentence(leave: LeaveOut, to_zero: int) -> str:
+def concentration_sentence(
+    leave: LeaveOut, to_zero: int, null: ConcentrationNull | None = None
+) -> str:
     """Rule 2."""
     total = leave.removed_total + leave.rest.total
     if total <= 0:
@@ -103,15 +110,23 @@ def concentration_sentence(leave: LeaveOut, to_zero: int) -> str:
             "too few to leave the best ones out."
         )
     carry = "trade carries" if leave.removed == 1 else "trades carry"
-    if leave.share >= CONCENTRATION_SHARE:
+    against = (
+        ""
+        if null is None
+        else f", against a median of {percent(null.share_median)} for logs drawn from a "
+        f"Normal with the same mean and spread (p = {null.share_p:.4f})"
+    )
+    if null is not None and null.share_p < CONCENTRATION_P:
         return (
             f"{count_word(leave.removed, capital=True)} {carry} {percent(leave.share)} "
-            f"of the profit: the other {leave.rest.n:,} {_made(leave.rest.total)} between them."
+            f"of the profit{against}: the other {leave.rest.n:,} "
+            f"{_made(leave.rest.total)} between them."
         )
     return (
-        f"The best {count_word(leave.removed)} {carry} {percent(leave.share)} of the "
-        f"profit, and the best {count_word(to_zero)} would have to go before the total "
-        "reached zero."
+        f"The best {'' if leave.removed == 1 else count_word(leave.removed) + ' '}{carry} "
+        f"{percent(leave.share)} of the "
+        f"profit{against}, and the best {count_word(to_zero)} would have to go before the "
+        "total reached zero."
     )
 
 
@@ -164,7 +179,7 @@ def verdict(a: Analysis) -> list[str]:
     """The verdict sentences for an analysis, in rule order."""
     sentences = [
         headline_sentence(a.net),
-        concentration_sentence(a.leave_n, a.to_zero),
+        concentration_sentence(a.leave_n, a.to_zero, a.null_normal),
         halves_sentence(a.halves),
         time_sentence(a.time_of_day, a.perm_time_of_day, a.perm_weekday),
         cost_sentence(a.cost),
