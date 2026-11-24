@@ -2,7 +2,7 @@
 
 ## Verdict
 
-400 trades made 20,000.00 net, a mean of 50.00 per trade with a t-statistic of 2.40, which is more than two standard errors from zero. Ten trades carry 99% of the profit: the other 390 made 200.00 between them. The first half of the trades made 13,176.52 and the second half made 6,823.48. The 09:00-10:00 window holds 60 trades for a median of 3.2 minutes and accounts for 97% of the profit.
+400 trades made 20,000.00 net, a mean of 50.00 per trade with a t-statistic of 2.40, which is more than two standard errors from zero. The best ten trades carry 99% of the profit, against a median of 51% for logs drawn from a Normal with the same mean and spread (p = 0.1184), and the best eleven would have to go before the total reached zero. The first half of the trades made 13,176.52 and the second half made 6,823.48. The 09:00-10:00 window holds 60 trades for a median of 3.2 minutes and accounts for 97% of the profit.
 
 ## Input
 
@@ -16,10 +16,18 @@ Starting capital 100,000.00 (set with `--capital`). Percentage drawdowns, the ul
 
 The t-statistic is mean / standard deviation x sqrt(number of trades), with the n - 1 standard deviation. It treats trades as independent draws.
 
+The clustered t-statistics use a cluster-robust standard error: trades that exit on the same day (or in the same month) may be correlated in any way, and the days (months) are taken as independent. With few clusters the clustered standard error is itself noisy.
+
 |  | Trades | Total | Mean | Std dev | t-statistic |
 |:--|--:|--:|--:|--:|--:|
 | Net | 400 | 20,000.00 | 50.00 | 416.46 | 2.40 |
 | Gross | 400 | 23,899.11 | 59.75 | 416.49 | 2.87 |
+
+| Net, t-statistic | Clusters | t-statistic |
+|:--|--:|--:|
+| Trades independent | 400 | 2.40 |
+| Clustered by exit day | 202 | 2.51 |
+| Clustered by exit month | 12 | 2.90 |
 
 ![Cumulative net result with and without the best ten trades](figures/equity.png)
 
@@ -34,6 +42,18 @@ Smallest number of best trades whose removal takes the total to zero or below: *
 | All trades | 0 | 0.00 | 0.0% | 20,000.00 | 50.00 | 2.40 |
 | Without best 10 | 10 | 19,800.00 | 99.0% | 200.00 | 0.51 | 0.04 |
 | Without best 5% | 20 | 26,212.43 | 131.1% | -6,212.43 | -16.35 | -1.25 |
+
+## Is that more concentrated than chance?
+
+Each row draws 2,000 logs of 400 trades under a null and computes the same two numbers. The Normal null keeps the mean and standard deviation and has thin tails and no skew. The reflected null resamples these trades and flips each one about the mean with a random sign, which keeps the tails and removes the skew. p is one-sided: the share of draws at least as concentrated as this log, counting the log itself.
+
+A draw whose total is zero or below counts as fully concentrated. Normal, same mean and std dev: 13 such draws; Trades resampled and reflected about the mean: 22 such draws.
+
+|  | Share in best 10 | 95th pct | p | Trades to zero | 5th pct | p |
+|:--|--:|--:|--:|--:|--:|--:|
+| This log | 99.0% |  |  | 11 |  |  |
+| Normal, same mean and std dev | 50.8% | 151.1% | 0.1184 | 23 | 7 | 0.1339 |
+| Trades resampled and reflected about the mean | 67.8% | 190.6% | 0.1859 | 21 | 4 | 0.2034 |
 
 ## First half against second half
 

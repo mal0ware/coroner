@@ -1,0 +1,4 @@
+| file | sha256 | first date | last date |
+|:--|--:|--:|--:|
+| F-F_Research_Data_Factors_daily_CSV.zip | 96c23b88e651cbfff3740a53f8225e59ee39893371e96385a1d8125ec2cd9c89 | 1926-07-01 | 2026-09-30 |
+| 10_Industry_Portfolios_daily_CSV.zip | 4c79bad80b6f4eee9d08e649ce223d1c51aadd65043b65baca50b54981d38d25 | 1926-07-01 | 2026-09-30 |

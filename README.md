@@ -1,54 +1,66 @@
 # Coroner
 
-**Give it a list of trades. It tells you what the profit died of.**
+Give it a list of closed trades. It reports what the profit rests on.
 
 ## The result
 
-Two synthetic trade logs each hold 400 trades and each made exactly 20,000.00 net. Their per-trade t-statistics are 3.98 and 2.40, so both pass the usual "more than two standard errors" check. In the first, the best ten trades carry 31.7% of the profit and 42 would have to go before the total reached zero. In the second, ten trades carry 99.0%, the other 390 made 200.00 between them, and 97.2% of the profit sits in one hour of the day where trades are held for a median of 3.2 minutes.
+The question: when a trade log made money, did it come from a broad edge or from a few trades, and does the usual per-trade t-statistic tell you which?
 
-![Cumulative net result of the two sample logs, with and without the best ten trades](results/headline.png)
+I ran Coroner on three trade logs from plain rules applied to Ken French's daily US returns, July 1926 to September 2026. Each trade pays a flat 10 basis points of notional for the round trip.
 
-The verdict paragraph that opens each report, exactly as the tool wrote it:
+| | US market, 200-day average | Ten industries, 200-day average | Ten industries, 5-day reversal |
+|:--|--:|--:|--:|
+| Trades | 282 | 3,230 | 5,267 |
+| t-statistic, trades independent | 4.87 | 12.56 | 1.90 |
+| t-statistic, clustered by exit month | 4.86 | 8.34 | 1.90 |
+| Share of profit in the best 10 | 54.6% | 12.8% | 45.7% |
+| The same for a Normal log with this mean and sd: median, p | 30.0%, 0.010 | 4.6%, 0.0005 | 24.0%, 0.19 |
+| The same for these trades with random signs: median, p | 40.6%, 0.067 | 11.3%, 0.090 | 45.5%, 0.50 |
+| t-statistic without the best 10 | 4.06 | 12.71 | 1.07 |
+| Best trades to remove before the total reaches zero | 31 | 221 | 28 |
+| The same for a Normal log: median, p | 46, 0.10 | 374, 0.0005 | 50, 0.23 |
+| The same for these trades with random signs: median, p | 73, 0.019 | 677, 0.0005 | 29, 0.49 |
+| Share of profit in the best 5% of trades | 71.4% | 87.1% | 459.8% |
+| Cost share of gross | 2.3% | 2.5% | 54.5% |
 
-| `samples/broad.csv` | `samples/concentrated.csv` |
-|:--|:--|
-| 400 trades made 20,000.00 net, a mean of 50.00 per trade with a t-statistic of 3.98, which is more than two standard errors from zero. The best ten trades carry 32% of the profit, and the best 42 would have to go before the total reached zero. The first half of the trades made 10,929.37 and the second half made 9,070.63. | 400 trades made 20,000.00 net, a mean of 50.00 per trade with a t-statistic of 2.40, which is more than two standard errors from zero. Ten trades carry 99% of the profit: the other 390 made 200.00 between them. The first half of the trades made 13,176.52 and the second half made 6,823.48. The 09:00-10:00 window holds 60 trades for a median of 3.2 minutes and accounts for 97% of the profit. |
-| [full report](results/broad/report.md) | [full report](results/concentrated/report.md) |
+What it found:
 
-The rest of the numbers, side by side (`results/summary.md`):
+- Both trend rules made money across the whole century, and neither depends on a handful of trades. Removing the best ten leaves a t-statistic above 4.
+- By the share in the best ten, their profit is more concentrated than a Normal log with the same mean and spread would give (p = 0.010 and 0.0005). Against the same trades flipped about their mean with random signs, which keeps the fat tails and removes the skew, neither p is below 0.05 (0.067 and 0.090). The count of best trades that must go before the total reaches zero is stricter. Against the flipped trades it is low for both rules (p = 0.019 and 0.0005), and in the industry rule the best 5% of trades carry 87.1% of the profit. The profit rests on the right tail of many trades, which a rule that cuts losers and keeps winners should produce.
+- For the industry rule the plain t-statistic overstates the evidence. Its 3,230 trades close on 2,577 distinct days and in 799 months, and clustering by exit month takes t from 12.56 to 8.34. For the single-market rule, whose trades never overlap, clustering changes almost nothing.
+- The 5-day reversal is within two standard errors of zero after costs (t = 1.90), costs take 54.5% of its gross profit, and it made 78,164 in its first half and 361,412 in its second. Its best ten trades carry 45.7% of the profit, which is ordinary for a log this noisy.
+
+![Cumulative net result of the three logs, with and without the best ten trades](results/headline.png)
+
+The main limit: the three rules are examples, picked for being simple, and a flat 10 basis points is too cheap for the 1930s. The concentration test is also weak when a few trades are huge, because those trades inflate the standard deviation the null is drawn with. The synthetic log below, where ten trades carry 99% of the profit, gets p = 0.12. See Limits.
+
+Full reports: [market](results/real/market_ma200/report.md), [industries, 200-day](results/real/industry_ma200/report.md), [industries, reversal](results/real/industry_reversal/report.md). All numbers are in `results/summary.md`.
+
+## The synthetic logs
+
+`samples/` holds two synthetic logs that the tests use as fixtures. They are random numbers, built to differ, and say nothing about any market. Each has 400 trades and made exactly 20,000.00. In `broad.csv` the trades are draws from one Normal distribution. In `concentrated.csv` ten trades carry 99.0% of the profit, and sixty trades sit in the first half hour of the day with a median hold of 3.2 minutes.
 
 | | broad | concentrated |
 |:--|--:|--:|
-| Net total | 20,000.00 | 20,000.00 |
 | t-statistic | 3.98 | 2.40 |
 | Share of profit in the best 10 | 31.7% | 99.0% |
-| Total without the best 10 | 13,658.48 | 200.00 |
+| The same for a Normal log: median, p | 31.6%, 0.50 | 50.8%, 0.12 |
 | t-statistic without the best 10 | 2.93 | 0.04 |
-| Total without the best 5% (20 trades) | 8,739.73 | -6,212.43 |
-| Best trades to remove to reach zero | 42 | 11 |
-| Permutation p, time of day | 0.9265 | 0.0005 |
-| Permutation p, weekday | 0.5717 | 0.7616 |
-| Short-hold buckets | none | 09:00-10:00 |
-| Cost share of gross | 16.8% | 16.3% |
-| Ulcer index (%) | 0.678 | 0.961 |
-| Recovery factor | 6.98 | 5.21 |
-| Positive months | 12 of 12 | 9 of 12 |
-| Target first / loss limit first / neither, i.i.d. bootstrap | 98.6% / 0.0% / 1.4% | 92.1% / 0.1% / 7.8% |
-| The same without the best 10 | 85.4% / 0.0% / 14.6% | 6.8% / 5.9% / 87.4% |
+| Best trades to remove before the total reaches zero | 42 | 11 |
+| Permutation p, time of day | 0.93 | 0.0005 |
 
-Two things in that table did not separate the logs. Cost share is the same by construction. The target-before-loss-limit odds are high for both, because resampling the concentrated log deals the ten large winners back in at the rate they occurred. The odds only fall apart once those ten are removed (6.8% against 85.4%). See Limits.
-
-The samples are synthetic and were built to differ in this way, so the result shows that the report tells the two cases apart. It says nothing about any real strategy.
+The broad log sits at the middle of its Normal null, as it should. The concentrated one does not stand out against its null: at t = 2.4 a Normal log's best ten trades carry about half the profit anyway. What separates the two is the t-statistic once the best ten are gone (0.04 against 2.93) and the time-of-day test. Reports: [broad](results/synthetic/broad/report.md), [concentrated](results/synthetic/concentrated/report.md); table: `results/synthetic/summary.md`.
 
 ## Reproduce
 
 ```
 uv sync
+uv run python scripts/fetch_data.py
 uv run python scripts/reproduce.py
 uv run pytest
 ```
 
-`reproduce.py` regenerates the two sample logs, both reports, the chart above and the tables in `results/`. It takes about ten seconds. `--fast` uses fewer paths and draws, for CI.
+`fetch_data.py` downloads two zip files from the Ken French data library into `data/`, which git ignores. They are free and need no key. `reproduce.py` rebuilds the three logs in `logs/` from them, then every report, chart and table in `results/`. It takes under two minutes. Without `data/` it uses the committed logs. `results/data_used.md` records the SHA-256 and date range of the files used. The library rebuilds its files from each new CRSP release, so a later download can change the logs. The committed ones come from the files built on the September 2026 release. `--fast` uses fewer paths and draws, for CI.
 
 ## Use it on your own trades
 
@@ -88,134 +100,123 @@ Options, with their defaults:
 | `--target`, `--loss-limit` | 10% of capital each | the two barriers, as positive amounts |
 | `--horizon` | number of trades in the file | trades per resampled path |
 | `--paths` | 10000 | resampled paths |
-| `--draws` | 2000 | permutation draws |
+| `--draws` | 2000 | permutation draws, and draws for each concentration null |
 | `--block` | 10 | mean block length of the stationary bootstrap, in trades |
 | `--risk-free` | 0 | percent a year, for the Martin ratio |
 | `--seed` | 0 | the same file, settings and seed give the same report |
 
 ## What was built
 
-Nine checks, each a pure function in `src/coroner/checks.py` or `src/coroner/barrier.py` with its own tests.
+Ten checks, each a pure function in `src/coroner/checks.py` or `src/coroner/barrier.py` with its own tests.
 
 1. Per-trade mean, standard deviation (n - 1) and t-statistic, mean / sd x sqrt(n).
-2. A label-shuffle permutation test. The statistic is the between-group sum of squares of net results grouped by time-of-day bucket, and again by weekday. Labels are shuffled 2,000 times with a fixed seed.
-3. First half against second half, in exit-time order, split by count.
-4. Profit by entry time-of-day bucket and by weekday, with the median holding time of each bucket and a flag for short holds.
-5. Leave-out: total, mean and t-statistic without the best N trades and without the best 5%, the share of profit those trades carried, and the smallest number of best trades whose removal takes the total to zero or below.
-6. Cost share: total cost over total gross result. When gross is zero or negative the share is reported as not defined.
-7. Ulcer index, Martin ratio, maximum drawdown, longest time under water and recovery factor. Recovery factor (net profit over maximum drawdown) is a trading-platform convention. I found no source for it in the literature.
-8. Share of days, months and quarters that ended positive, with counts. Only periods with a closed trade are counted.
-9. The chance of reaching a profit target before a loss limit. Trades are resampled by the i.i.d. bootstrap and by the stationary bootstrap, each path's running total is followed, and paths that reach neither barrier are reported separately. The Brownian closed form is printed beside them.
+2. The same t-statistic with a cluster-robust standard error, with trades grouped by exit day and by exit month. Trades in one cluster may be correlated in any way; clusters are taken as independent.
+3. A label-shuffle permutation test. The statistic is the between-group sum of squares of net results grouped by time-of-day bucket, and again by weekday. Labels are shuffled 2,000 times with a fixed seed.
+4. First half against second half, in exit-time order, split by count.
+5. Profit by entry time-of-day bucket and by weekday, with the median holding time of each bucket and a flag for short holds.
+6. Leave-out: total, mean and t-statistic without the best N trades and without the best 5%, the share of profit those trades carried, and the smallest number of best trades whose removal takes the total to zero or below.
+7. Concentration against two nulls. The best-N share and the trades-to-zero count are computed for 2,000 logs of the same length drawn two ways: from a Normal with the log's mean and standard deviation, and by resampling the trades and reflecting each about the mean with a random sign. The report gives the null median, the 95th (or 5th) percentile and a one-sided p-value.
+8. Cost share: total cost over total gross result. When gross is zero or negative the share is reported as not defined.
+9. Ulcer index, Martin ratio, maximum drawdown, longest time under water and recovery factor. Recovery factor (net profit over maximum drawdown) is a trading-platform convention. I found no source for it in the literature.
+10. Share of days, months and quarters that ended positive, and the chance of reaching a profit target before a loss limit. For the second, trades are resampled by the i.i.d. bootstrap and by the stationary bootstrap, each path's running total is followed, and paths that reach neither barrier are reported separately. The Brownian closed form is printed beside them.
 
 ### The verdict rules
 
 The verdict is three to five sentences. Each comes from one fixed rule in `src/coroner/verdict.py`.
 
 1. Headline, always: trade count, net total, mean and t-statistic, and whether |t| is at least 2.
-2. Concentration, always. If the best N trades carry at least half the profit: "N trades carry X% of the profit" and what the others made. Otherwise the share they carry and the number that must go to reach zero. If the log lost money it says there is no profit to attribute.
+2. Concentration, always. The share of profit in the best N trades beside the Normal null's median and p. When p is below 0.05 it says "N trades carry X% of the profit" and what the others made. Otherwise it says how many of the best trades must go before the total reaches zero. If the log lost money it says there is no profit to attribute.
 3. Halves, always: what each half made or lost.
 4. Time, only when triggered. If a time-of-day bucket is flagged for short holds, the flagged bucket with the largest absolute profit is named. Otherwise, if a permutation test has p below 0.01, that is stated.
 5. Costs, only when triggered: costs are at least half of gross, or gross is not positive.
+
+The concentration rule used to fire when the best N carried half the profit or more. That cut-off had no reference point: the share a log puts in its best ten depends on its length and its t-statistic. The p-value against the Normal null replaces it.
 
 ## Sources
 
 - Peter G. Martin and Byron McCann, The Investor's Guide to Fidelity Funds, Wiley, 1989 (the ulcer index). I read Martin's own statement of the formula at tangotools.com/ui/ui.htm, not the book.
 - Dimitris N. Politis and Joseph P. Romano, "The Stationary Bootstrap", Journal of the American Statistical Association 89(428), 1994, 1303-1313. The JASA text is paywalled. The algorithm was taken from the same authors' "Limit theorems for weakly dependent Hilbert space valued random variables with application to the stationary bootstrap", Statistica Sinica 4, 1994, Section 3.1.
 - Karl Sigman, lecture notes on Brownian motion and on the gambler's ruin problem, Columbia University, for the two closed forms.
+- Kenneth R. French, Data Library, Fama/French 3 Factors (daily) and 10 Industry Portfolios (daily), for the real logs.
 
 `PAPER.md` has each formula with its location in the source.
 
 ## Comparison with the sources
 
-There is no paper result to replicate here. The comparison is between the barrier simulator and the closed forms it should agree with (`results/barrier_check.md`, 20,000 paths per row):
+There is no paper result to replicate here. The comparison is between the barrier simulator and the closed forms it should agree with (`results/barrier_check.md`):
 
-| Case | Exact | Simulated | Difference | z |
-|:--|--:|--:|--:|--:|
-| Fair +-1 walk, target 15, limit 10 | 0.4000 | 0.4001 | +0.0001 | +0.03 |
-| +-1 walk, p = 0.55, target 10, limit 10 | 0.8815 | 0.8771 | -0.0043 | -1.90 |
-| +-1 walk, p = 0.45, target 10, limit 10 | 0.1185 | 0.1123 | -0.0062 | -2.71 |
-| Gaussian steps, sd 0.5, target 15, limit 10 | 0.5215 | 0.5265 | +0.0050 | +1.42 |
-| Gaussian steps, sd 0.25, target 15, limit 10 | 0.5215 | 0.5219 | +0.0003 | +0.09 |
+| Case | Paths | Exact | Simulated | Difference | z |
+|:--|--:|--:|--:|--:|--:|
+| Fair +-1 walk, target 15, limit 10 | 1,000,000 | 0.40000 | 0.40009 | +0.00009 | +0.19 |
+| +-1 walk, p = 0.55, target 10, limit 10 | 1,000,000 | 0.88150 | 0.88118 | -0.00032 | -1.00 |
+| +-1 walk, p = 0.45, target 10, limit 10 | 1,000,000 | 0.11850 | 0.11882 | +0.00032 | +0.98 |
+| Gaussian steps, sd 0.5, target 15, limit 10 | 100,000 | 0.52155 | 0.52621 | +0.00466 | +2.95 |
+| Gaussian steps, sd 0.25, target 15, limit 10 | 100,000 | 0.52155 | 0.52329 | +0.00174 | +1.10 |
 
-The third row is 2.7 standard errors low. I reran both biased walks at 200,000 paths with three other seeds each. The p = 0.45 walk came out at z = -1.66, -0.87 and -0.70, and the p = 0.55 walk at -0.55, -0.09 and +0.39. I found no cause in the code and read the row as a chance draw, but all four p = 0.45 runs are below the exact value and I have not ruled out a small bias. The committed table is the original run.
+The three +-1 walks agree with the gambler's ruin formula to within one standard error at a million paths each. An earlier run at 20,000 paths had the p = 0.45 walk 2.7 standard errors low; at a million paths it is one standard error high, so that was chance. The Gaussian rows are expected to sit above the Brownian value: a discrete step overshoots the barrier, and the gap shrinks from +0.0047 to +0.0017 when the step is halved.
 
 The ulcer index and the Martin ratio differ from Martin's statement in three small ways, listed in `PAPER.md`.
 
-## Data
-
-Any trade log with entry time, exit time, gross and net result. The two samples in `samples/` are random numbers from a seeded generator (`src/coroner/samples.py`). They use the weekdays of 2025 with no holiday calendar and contain no market data. Nothing is downloaded, and `scripts/fetch_data.py` only says so.
-
 ## How it is tested
 
-127 tests, the maths first.
+147 tests, the maths first. One of them needs the downloaded data and is skipped without it, as in CI.
 
 - Exact algebra on small hand-built inputs for every check, with the arithmetic written in a comment beside each expected value
+- The clustered t-statistic by hand, equal to the plain one with one trade per cluster, and lower when trades in a cluster move together
+- The concentration null: p-values near uniform on logs drawn from the null itself, and a small p for a log with five winners of twelve standard deviations
 - The ulcer index against the loop printed on Martin's page
 - The barrier simulator against a/(a+b) for a fair +-1 walk, the gambler's ruin formula for a biased one, and the Brownian closed form for Gaussian steps
-- The Brownian formula against its mu -> 0 limit, its reflection symmetry and the gambler's ruin formula at small drift
 - The permutation test: mean p near 0.5 over 300 data sets whose labels carry no information, and the exact p of 2/70 on a case small enough to enumerate
 - The stationary bootstrap: blocks follow on and wrap, block lengths have the stated mean, a mean block of 1 gives independent draws
+- The strategies: the moving-average rule never uses the close it trades on, and trades, reversal picks and costs by hand
 - The loader: every rejection names its row; timezone handling across a daylight-saving change
 - Each verdict rule against the exact sentence it must produce
-- A six-trade file through the whole analysis with every number checked by hand
-- Running `reproduce` twice gives byte-identical files, and the committed samples and summary table match what the code produces
+- Running `reproduce` twice gives byte-identical files, the committed summary tables match what the code produces from the committed logs, and the committed logs match the downloaded data
 
 ## Layout
 
 ```
-src/coroner/trades.py     read and validate the CSV
-src/coroner/checks.py     checks 1 to 8
-src/coroner/barrier.py    check 9 and the closed forms
-src/coroner/analysis.py   runs every check
-src/coroner/verdict.py    the verdict rules
-src/coroner/report.py     markdown and HTML
-src/coroner/charts.py     the figures
-src/coroner/samples.py    the two synthetic logs
-src/coroner/cli.py        the command line
-tests/                    maths tests first
-scripts/reproduce.py      one command rebuilds every figure and table
-scripts/make_samples.py   rewrites samples/
-scripts/fetch_data.py     nothing to fetch
-samples/                  the two synthetic logs
-results/                  committed reports, figures and tables
-PAPER.md                  citations, formulas, differences from the sources
+src/coroner/trades.py      read and validate the CSV
+src/coroner/checks.py      the checks
+src/coroner/barrier.py     target before loss limit, and the closed forms
+src/coroner/analysis.py    runs every check
+src/coroner/verdict.py     the verdict rules
+src/coroner/report.py      markdown and HTML
+src/coroner/charts.py      the figures
+src/coroner/strategies.py  the three public-data rules that make logs/
+src/coroner/samples.py     the two synthetic logs
+src/coroner/cli.py         the command line
+tests/                     maths tests first
+scripts/fetch_data.py      downloads the Ken French files into data/
+scripts/reproduce.py       rebuilds logs/ and results/
+scripts/make_samples.py    rewrites samples/
+logs/                      trade logs from the three rules
+samples/                   the two synthetic logs
+results/real/              reports on the three logs
+results/synthetic/         reports on the two synthetic logs
+PAPER.md                   citations, formulas, differences from the sources
 ```
 
 Dependencies are numpy, pandas and matplotlib. The command line uses `argparse` from the standard library.
 
-## Roadmap
-
-- [x] Project skeleton, CI, and the reproduce command
-- [x] A command-line tool that reads a CSV of trades and writes an HTML and a markdown report
-- [x] Per-trade t-statistic, and a label-shuffle permutation test
-- [x] First half against second half
-- [x] Profit by time of day and by weekday, with a flag for windows where trades are held only minutes
-- [x] The result without the best N trades, and how many of the best trades must go before the total reaches zero
-- [x] Cost as a share of gross profit
-- [x] Ulcer index, recovery factor, and the share of days, months and quarters that ended positive
-- [x] The odds of reaching a profit target before a loss limit, by resampling the trades
-- [x] `PAPER.md` comparison with the sources
-- [x] Results and limits written up at the top of this file
-
 ## Limits
 
-- The headline is a demonstration on synthetic logs built to differ. It has not been run on a real trade log in this repository.
-- The t-statistic did not catch the concentrated log: 2.40 with ten trades carrying 99% of the profit. It treats trades as independent draws from one distribution, and ten outliers in 400 still leave a mean 2.4 standard errors above zero.
-- The barrier odds did not catch it either. Resampling gave the concentrated log a 92.1% chance of reaching +10,000 before -10,000, because the bootstrap assumes the ten large winners keep arriving at the same rate. Resampling assumes the future looks like the sample.
-- The stationary bootstrap's mean block of 10 trades is a default I picked. It is not estimated from the data, and on these samples, which have no serial dependence by construction, it changed the odds by about a point.
-- Percentage drawdowns, the ulcer index and the Martin ratio depend on `--capital`. The default of 100,000 is arbitrary. The Martin ratios of 29.73 and 21.00 above are that large because the samples lose little against that capital, and they mean nothing beyond the comparison.
-- The ulcer index is computed on end-of-day equity over every calendar day, weekends included. Intraday drawdowns do not enter it. Maximum drawdown and time under water use the trade-by-trade curve and do see them.
-- Equity moves only when a trade closes. Open-trade losses are invisible, so every drawdown figure is a lower bound.
+- The three rules are examples. I picked them for being plain and well known, decided the rules, sizes and cost in this revision before running Coroner on the logs, and ran each once. Git history cannot show that order. Other windows or costs would give other numbers.
+- The cost is a flat 10 basis points of notional per round trip in every year. Trading an industry portfolio in 1930 cost far more, and there was no index fund to trade. The reversal log is the one this matters for, since costs already take 54.5% of its gross.
+- The concentration nulls use the log's own standard deviation. A few huge trades inflate it, which widens the null and hides those same trades. The synthetic concentrated log shows it: 99% of the profit in ten trades, p = 0.12. Read the share beside the t-statistic without the best trades.
+- The reflected null removes skew but keeps the trades' tails. A trend rule cuts losers and keeps winners, so its trades are skewed by design, and a small p there is a property of the rule.
+- The clustered t-statistic groups trades by exit day or month. Trades that overlap but close in different months are still treated as independent, so the clustered figure for the industry rule may still be high. With few clusters (the synthetic logs have 12 months) the clustered standard error is itself noisy, and there it came out above the plain one.
+- The t-statistic did not catch the synthetic concentrated log: 2.40 with ten trades carrying 99% of the profit. The barrier odds did not either: resampling gave it a 92.1% chance of reaching +10,000 before -10,000, because the bootstrap deals the ten large winners back in at the rate they occurred.
+- The stationary bootstrap's mean block of 10 trades is a default I picked, not estimated from the data.
+- Percentage drawdowns, the ulcer index and the Martin ratio depend on `--capital`. The default of 100,000 is arbitrary, and the real logs use fixed trade sizes without compounding, so their annual return and Martin ratio describe that bookkeeping and little else.
+- The ulcer index is computed on end-of-day equity over every calendar day, weekends included. Equity moves only when a trade closes, so open-trade losses are invisible and every drawdown figure is a lower bound. On the real logs, whose trades last up to years, that matters.
+- The real logs carry dates only, so the time-of-day checks have one bucket and do not run.
 - The short-hold flag uses fixed thresholds (median under 5 minutes, at least 20 trades). It marks a window to look at. It does not show that the fills were unrealistic.
 - The permutation tests cover two labelings. With two tests the verdict uses p below 0.01, which is a rough allowance and not a formal correction.
-- Positive-period shares count only periods with a closed trade.
-- It judges the trades you give it. It cannot see the versions you tried and threw away; Procrustes is the tool for that.
-- The checks came out of a private project, where they showed that a strategy with 202 trades owed 99% of its gain to 10 of them. That figure is the owner's and is not reproduced here.
+- It judges the trades you give it. It cannot see the versions you tried and threw away; [Procrustes](https://github.com/mal0ware/procrustes) is for that.
 - This is research code. It is not investment advice and it does not trade.
 
-## The name
-
-A coroner does not ask whether the patient looked healthy. A coroner finds the cause.
+A coroner finds the cause of death; this one looks for the cause of a profit.
 
 ## Licence
 
